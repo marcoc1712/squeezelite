@@ -20,7 +20,7 @@
 
 // make may define: PORTAUDIO, SELFPIPE, RESAMPLE, RESAMPLE_MP, VISEXPORT, IR, DSD, FAAD, LINKALL to influence build
 
-#define VERSION "v23.10.14 (R2)"
+#define VERSION "v24.04.18 (R2)"
 
 #if !defined(MODEL_NAME)
 #define MODEL_NAME SqueezeLite-R2
@@ -145,7 +145,7 @@
 // dynamically loaded libraries at run time
 
 #if LINUX
-#define LIBFLAC "libFLAC.so.8"
+#define LIBFLAC "libFLAC.so.%d"
 #define LIBMAD  "libmad.so.0"
 #define LIBMPG "libmpg123.so.0"
 #define LIBVORBIS "libvorbisfile.so.3"
@@ -159,7 +159,7 @@
 #endif
 
 #if OSX
-#define LIBFLAC "libFLAC.8.dylib"
+#define LIBFLAC "libFLAC.%d.dylib"
 #define LIBMAD  "libmad.0.dylib"
 #define LIBMPG "libmpg123.0.dylib"
 #define LIBVORBIS "libvorbisfile.3.dylib"
@@ -185,8 +185,8 @@
 #endif
 
 #if FREEBSD
-#define LIBFLAC "libFLAC.so.11"
-#define LIBMAD  "libmad.so.2"
+#define LIBFLAC "libFLAC.so.%d"
+#define LIBMAD  "libmad.so.0"
 #define LIBMPG "libmpg123.so.0"
 #define LIBVORBIS "libvorbisfile.so.6"
 #define LIBTREMOR "libvorbisidec.so.1"
@@ -362,6 +362,12 @@ struct wake {
 
 #define BYTES_PER_FRAME 8
 
+#if BYTES_PER_FRAME == 8
+#define ISAMPLE_T 		s32_t
+#else
+#define ISAMPLE_T		s16_t
+#endif
+
 #define min(a,b) (((a) < (b)) ? (a) : (b))
 
 // logging
@@ -383,6 +389,7 @@ char *next_param(char *src, char c);
 u32_t gettime_ms(void);
 void get_mac(u8_t *mac);
 void set_nonblock(sockfd s);
+void set_recvbufsize(sockfd s);
 int connect_timeout(sockfd sock, const struct sockaddr *addr, socklen_t addrlen, int timeout);
 void server_addr(char *server, in_addr_t *ip_ptr, unsigned *port_ptr);
 void set_readwake_handles(event_handle handles[], sockfd s, event_event e);
@@ -403,6 +410,7 @@ void *dlopen(const char *filename, int flag);
 void *dlsym(void *handle, const char *symbol);
 char *dlerror(void);
 int poll(struct pollfd *fds, unsigned long numfds, int timeout);
+#define strncasecmp strnicmp
 #endif
 #if LINUX || FREEBSD
 void touch_memory(u8_t *buf, size_t size);
@@ -427,6 +435,7 @@ unsigned _buf_cont_write(struct buffer *buf);
 void _buf_inc_readp(struct buffer *buf, unsigned by);
 void _buf_inc_writep(struct buffer *buf, unsigned by);
 void buf_flush(struct buffer *buf);
+void _buf_unwrap(struct buffer *buf, size_t cont);
 void buf_adjust(struct buffer *buf, size_t mod);
 void _buf_resize(struct buffer *buf, size_t size);
 void buf_init(struct buffer *buf, size_t size);
@@ -535,12 +544,15 @@ typedef enum { FADE_INACTIVE = 0, FADE_DUE, FADE_ACTIVE } fade_state;
 typedef enum { FADE_UP = 1, FADE_DOWN, FADE_CROSS } fade_dir;
 typedef enum { FADE_NONE = 0, FADE_CROSSFADE, FADE_IN, FADE_OUT, FADE_INOUT } fade_mode;
 
-#define MAX_SUPPORTED_SAMPLERATES 16
-#define TEST_RATES = { 768000, 705600, 384000, 352800, 192000, 176400, 96000, 88200, 48000, 44100, 32000, 24000, 22500, 16000, 12000, 11025, 8000, 0 }
+#define MONO_RIGHT	0x02
+#define MONO_LEFT	0x01
+#define MAX_SUPPORTED_SAMPLERATES 20
+#define TEST_RATES = { 1536000, 1411200, 768000, 705600, 384000, 352800, 192000, 176400, 96000, 88200, 48000, 44100, 32000, 24000, 22500, 16000, 12000, 11025, 8000, 0 }
 
 struct outputstate {
 	output_state state;
 	output_format format;
+	u8_t channels;
 	const char *device;
 #if ALSA
 	unsigned buffer;
@@ -552,7 +564,7 @@ struct outputstate {
 	unsigned latency;
 	int osx_playnice;
 #endif
-	int (* write_cb)(frames_t out_frames, bool silence, s32_t gainL, s32_t gainR, s32_t cross_gain_in, s32_t cross_gain_out, s32_t **cross_ptr);
+	int (* write_cb)(frames_t out_frames, bool silence, s32_t gainL, s32_t gainR, u8_t flags, s32_t cross_gain_in, s32_t cross_gain_out, s32_t **cross_ptr);
 	unsigned start_frames;
 	unsigned frames_played;
 	unsigned frames_played_dmp;// frames played at the point delay is measured
@@ -597,6 +609,7 @@ struct outputstate {
 void output_init_common(log_level level, const char *device, unsigned output_buf_size, unsigned rates[], unsigned idle);
 void output_close_common(void);
 void output_flush(void);
+bool output_flush_streaming(void);
 // _* called with mutex locked
 frames_t _output_frames(frames_t avail);
 void _checkfade(bool);
@@ -606,9 +619,8 @@ void _checkfade(bool);
 void list_devices(void);
 void list_mixers(const char *output_device);
 void set_volume(unsigned left, unsigned right);
-bool test_open(const char *device, unsigned rates[]);
-void output_init_alsa(log_level level, const char *device, unsigned output_buf_size, char *params, unsigned rates[], 
-					  unsigned rate_delay, unsigned rt_priority, unsigned idle, char *volume_mixer, bool mixer_unmute);
+bool test_open(const char *device, unsigned rates[], bool userdef_rates);
+void output_init_alsa(log_level level, const char *device, unsigned output_buf_size, char *params, unsigned rates[], unsigned rate_delay, unsigned rt_priority, unsigned idle, char *mixer_device, char *volume_mixer, bool mixer_unmute, bool mixer_linear);
 void output_close_alsa(void);
 #endif
 
@@ -616,7 +628,7 @@ void output_close_alsa(void);
 #if PORTAUDIO
 void list_devices(void);
 void set_volume(unsigned left, unsigned right);
-bool test_open(const char *device, unsigned rates[]);
+bool test_open(const char *device, unsigned rates[], bool userdef_rates);
 void output_init_pa(log_level level, const char *device, unsigned output_buf_size, char *params, unsigned rates[], unsigned rate_delay, unsigned idle);
 void output_close_pa(void);
 void _pa_open(void);
@@ -627,9 +639,9 @@ void output_init_stdout(log_level level, unsigned output_buf_size, char *params,
 void output_close_stdout(void);
 
 // output_pack.c
-void _scale_and_pack_frames(void *outputptr, s32_t *inputptr, frames_t cnt, s32_t gainL, s32_t gainR, output_format format);
+void _scale_and_pack_frames(void *outputptr, s32_t *inputptr, frames_t cnt, s32_t gainL, s32_t gainR, u8_t flags, output_format format);
 void _apply_cross(struct buffer *outputbuf, frames_t out_frames, s32_t cross_gain_in, s32_t cross_gain_out, s32_t **cross_ptr);
-void _apply_gain(struct buffer *outputbuf, frames_t count, s32_t gainL, s32_t gainR);
+void _apply_gain(struct buffer *outputbuf, frames_t count, s32_t gainL, s32_t gainR, u8_t flags);
 s32_t gain(s32_t gain, s32_t sample);
 s32_t to_gain(float f);
 

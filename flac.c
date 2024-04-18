@@ -2,6 +2,7 @@
  *  Squeezelite - lightweight headless squeezeplay emulator for linux
  *
  *  (c) Adrian Smith 2012, triode1@btinternet.com
+ *      Ralph Irving 2015-2024, ralph_irving@hotmail.com
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -22,8 +23,21 @@
 
 #include <FLAC/stream_decoder.h>
 
+#if BYTES_PER_FRAME == 4		
+#define ALIGN8(n) 	(n << 8)		
+#define ALIGN16(n) 	(n)
+#define ALIGN24(n)	(n >> 8) 
+#define ALIGN32(n)	(n >> 16)
+#else
+#define ALIGN8(n) 	(n << 24)		
+#define ALIGN16(n) 	(n << 16)
+#define ALIGN24(n)	(n << 8) 
+#define ALIGN32(n)	(n)
+#endif
+
 struct flac {
 	FLAC__StreamDecoder *decoder;
+	u8_t container;
 #if !LINKALL
 	// FLAC symbols to be dynamically loaded
 	const char **FLAC__StreamDecoderErrorStatusString;
@@ -43,8 +57,22 @@ struct flac {
 		FLAC__StreamDecoderErrorCallback error_callback,
 		void *client_data
 	);
+	FLAC__StreamDecoderInitStatus (* FLAC__stream_decoder_init_ogg_stream)(
+		FLAC__StreamDecoder *decoder,
+		FLAC__StreamDecoderReadCallback read_callback,
+		FLAC__StreamDecoderSeekCallback seek_callback,
+		FLAC__StreamDecoderTellCallback tell_callback,
+		FLAC__StreamDecoderLengthCallback length_callback,
+		FLAC__StreamDecoderEofCallback eof_callback,
+		FLAC__StreamDecoderWriteCallback write_callback,
+		FLAC__StreamDecoderMetadataCallback metadata_callback,
+		FLAC__StreamDecoderErrorCallback error_callback,
+		void *client_data
+	);
 	FLAC__bool (* FLAC__stream_decoder_process_single)(FLAC__StreamDecoder *decoder);
 	FLAC__StreamDecoderState (* FLAC__stream_decoder_get_state)(const FLAC__StreamDecoder *decoder);
+	void (*FLAC__stream_decoder_set_metadata_respond)(FLAC__StreamDecoder* decoder, FLAC__MetadataType type);
+	FLAC__bool (*FLAC__stream_decoder_set_ogg_chaining)(FLAC__StreamDecoder* decoder, FLAC__bool allow);
 #endif
 };
 
@@ -83,6 +111,23 @@ extern struct processstate process;
 #define FLAC_A(h, a)     (h)->FLAC__ ## a
 #endif
 
+static void metadata_cb(const FLAC__StreamDecoder* decoder, const FLAC__StreamMetadata* metadata, void* client_data) {
+	switch (metadata->type) {
+	case FLAC__METADATA_TYPE_STREAMINFO:
+		LOG_INFO("stream parameters rate:%d, channels:%d, size:%d", metadata->data.stream_info.sample_rate, 
+				 metadata->data.stream_info.channels, metadata->data.stream_info.bits_per_sample);
+		break;
+	case FLAC__METADATA_TYPE_VORBIS_COMMENT: {
+		FLAC__StreamMetadata_VorbisComment_Entry* comment = metadata->data.vorbis_comment.comments;
+		for (int i = 0; i < metadata->data.vorbis_comment.num_comments; i++, comment++) {
+			LOG_INFO("stream metadata %*s", comment->length, comment->entry);
+		}
+	}
+	default:
+		break;
+	}
+}
+
 static FLAC__StreamDecoderReadStatus read_cb(const FLAC__StreamDecoder *decoder, FLAC__byte buffer[], size_t *want, void *client_data) {
 	size_t bytes;
 	bool end;
@@ -97,6 +142,10 @@ static FLAC__StreamDecoderReadStatus read_cb(const FLAC__StreamDecoder *decoder,
 	UNLOCK_S;
 
 	*want = bytes;
+
+	// if there's nothing in the stream buffer, libFLAC will continuously call this function as quickly as possible. slow it down.
+	if (!bytes && !end)
+		usleep(1000);
 
 	return end ? FLAC__STREAM_DECODER_READ_STATUS_END_OF_STREAM : FLAC__STREAM_DECODER_READ_STATUS_CONTINUE;
 }
@@ -149,14 +198,14 @@ static FLAC__StreamDecoderWriteStatus write_cb(const FLAC__StreamDecoder *decode
 	while (frames > 0) {
 		frames_t f;
 		frames_t count;
-		s32_t *optr;
+		ISAMPLE_T *optr;
 
 		IF_DIRECT( 
-			optr = (s32_t *)outputbuf->writep; 
+			optr = (ISAMPLE_T *)outputbuf->writep; 
 			f = min(_buf_space(outputbuf), _buf_cont_write(outputbuf)) / BYTES_PER_FRAME; 
 		);
 		IF_PROCESS(
-			optr = (s32_t *)process.inbuf;
+			optr = (ISAMPLE_T *)process.inbuf;
 			f = process.max_in_frames;
 		);
 
@@ -166,23 +215,23 @@ static FLAC__StreamDecoderWriteStatus write_cb(const FLAC__StreamDecoder *decode
 
 		if (bits_per_sample == 8) {
 			while (count--) {
-				*optr++ = *lptr++ << 24;
-				*optr++ = *rptr++ << 24;
+				*optr++ = ALIGN8(*lptr++);
+				*optr++ = ALIGN8(*rptr++);
 			}
 		} else if (bits_per_sample == 16) {
 			while (count--) {
-				*optr++ = *lptr++ << 16;
-				*optr++ = *rptr++ << 16;
+				*optr++ = ALIGN16(*lptr++);
+				*optr++ = ALIGN16(*rptr++);
 			}
 		} else if (bits_per_sample == 24) {
 			while (count--) {
-				*optr++ = *lptr++ << 8;
-				*optr++ = *rptr++ << 8;
+				*optr++ = ALIGN24(*lptr++);
+				*optr++ = ALIGN24(*rptr++);
 			}
 		} else if (bits_per_sample == 32) {
 			while (count--) {
-				*optr++ = *lptr++;
-				*optr++ = *rptr++;
+				*optr++ = ALIGN32(*lptr++);
+				*optr++ = ALIGN32(*rptr++);
 			}
 		} else {
 			LOG_ERROR("unsupported bits per sample: %u", bits_per_sample);
@@ -208,18 +257,42 @@ static void error_cb(const FLAC__StreamDecoder *decoder, FLAC__StreamDecoderErro
 	LOG_INFO("flac error: %s", FLAC_A(f, StreamDecoderErrorStatusString)[status]);
 }
 
+static void flac_close(void) {
+	FLAC(f, stream_decoder_delete, f->decoder);
+	f->decoder = NULL;
+}
+
 static void flac_open(u8_t sample_size, u8_t sample_rate, u8_t channels, u8_t endianness) {
+	if ( f->decoder && f->container != sample_size ) {
+		flac_close();
+	}
+
+	f->container = sample_size;
+
 	if (f->decoder) {
 		FLAC(f, stream_decoder_reset, f->decoder);
 	} else {
 		f->decoder = FLAC(f, stream_decoder_new);
 	}
-	FLAC(f, stream_decoder_init_stream, f->decoder, &read_cb, NULL, NULL, NULL, NULL, &write_cb, NULL, &error_cb, NULL);
-}
-
-static void flac_close(void) {
-	FLAC(f, stream_decoder_delete, f->decoder);
-	f->decoder = NULL;
+	
+	if ( f->container == 'o' ) {
+		LOG_INFO("ogg/flac container - using init_ogg_stream");
+#if LINKALL
+#ifdef FLAC__OGG_CHAINING
+		FLAC__stream_decoder_set_ogg_chaining(f->decoder, true);
+#else 
+#pragma message ("OggFlac library does not support chaining") 
+#endif
+#else
+		if (f->FLAC__stream_decoder_set_ogg_chaining) {
+			f->FLAC__stream_decoder_set_ogg_chaining(f->decoder, true);
+		}
+#endif
+		FLAC(f, stream_decoder_set_metadata_respond, f->decoder, FLAC__METADATA_TYPE_VORBIS_COMMENT);
+		FLAC(f, stream_decoder_init_ogg_stream, f->decoder, &read_cb, NULL, NULL, NULL, NULL, &write_cb, &metadata_cb, &error_cb, NULL);
+	} else {
+		FLAC(f, stream_decoder_init_stream, f->decoder, &read_cb, NULL, NULL, NULL, NULL, &write_cb, NULL, &error_cb, NULL);
+	}
 }
 
 static decode_state flac_decode(void) {
@@ -241,8 +314,13 @@ static decode_state flac_decode(void) {
 
 static bool load_flac() {
 #if !LINKALL
-	void *handle = dlopen(LIBFLAC, RTLD_NOW);
+	void *handle = NULL;
+	char name[30];
 	char *err;
+
+        sprintf(name, LIBFLAC, FLAC_API_VERSION_CURRENT < 12 ? 8 : 12);
+
+        handle = dlopen(name, RTLD_NOW);
 
 	if (!handle) {
 		LOG_INFO("dlerror: %s", dlerror());
@@ -255,15 +333,28 @@ static bool load_flac() {
 	f->FLAC__stream_decoder_reset = dlsym(handle, "FLAC__stream_decoder_reset");
 	f->FLAC__stream_decoder_delete = dlsym(handle, "FLAC__stream_decoder_delete");
 	f->FLAC__stream_decoder_init_stream = dlsym(handle, "FLAC__stream_decoder_init_stream");
+	f->FLAC__stream_decoder_init_ogg_stream = dlsym(handle, "FLAC__stream_decoder_init_ogg_stream");
 	f->FLAC__stream_decoder_process_single = dlsym(handle, "FLAC__stream_decoder_process_single");
 	f->FLAC__stream_decoder_get_state = dlsym(handle, "FLAC__stream_decoder_get_state");
+	f->FLAC__stream_decoder_set_metadata_respond = dlsym(handle, "FLAC__stream_decoder_set_metadata_respond");
 
 	if ((err = dlerror()) != NULL) {
 		LOG_INFO("dlerror: %s", err);		
 		return false;
 	}
 
-	LOG_INFO("loaded "LIBFLAC);
+	// ignore error for this new API
+	f->FLAC__stream_decoder_set_ogg_chaining = dlsym(handle, "FLAC__stream_decoder_set_ogg_chaining");
+	if (!f->FLAC__stream_decoder_set_ogg_chaining) {
+               if ((err = dlerror()) != NULL) {
+                       LOG_INFO("dlerror: %s", err);
+               }
+		LOG_INFO("OggFlac chaining disabled");
+	}
+
+	LOG_INFO("loaded %s", name);
+#elif !defined(FLAC__OGG_CHAINING)
+	LOG_INFO("OggFlac chaining disabled");
 #endif
 
 	return true;
@@ -272,9 +363,9 @@ static bool load_flac() {
 struct codec *register_flac(void) {
 	static struct codec ret = { 
 		'f',          // id
-		"flc",        // types
-		8192,         // min read
-		102400,       // min space
+		"ogf,flc",    // types
+		16384,        // min read
+		204800,       // min space
 		flac_open,    // open
 		flac_close,   // close
 		flac_decode,  // decode
@@ -291,6 +382,6 @@ struct codec *register_flac(void) {
 		return NULL;
 	}
 
-	LOG_INFO("using flac to decode flc");
+	LOG_INFO("using flac to decode ogf,flc");
 	return &ret;
 }
