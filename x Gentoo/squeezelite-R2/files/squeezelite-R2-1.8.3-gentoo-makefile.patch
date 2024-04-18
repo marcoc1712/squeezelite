@@ -1,0 +1,20 @@
+--- squeezelite-R2-1.8.3-R2-.orig/Makefile	2016-08-30 08:33:21.709961797 +0200
++++ squeezelite-R2-1.8.3-R2-/Makefile	2016-08-30 08:32:53.509962000 +0200
+@@ -1,6 +1,6 @@
+ # Cross compile support - create a Makefile which defines these three variables and then includes this Makefile...
+ CFLAGS  ?= -Wall -fPIC -O2 $(OPTS)
+-LDFLAGS ?= -lasound -lpthread -lm -lrt
++EXTRALIBS ?= -lasound -lpthread -lm -lrt -I./include
+ EXECUTABLE ?= squeezelite-R2
+ 
+ # passing one or more of these in $(OPTS) enables optional feature inclusion
+@@ -74,7 +74,7 @@
+ all: $(EXECUTABLE)
+ 
+ $(EXECUTABLE): $(OBJECTS)
+-	$(CC) $(OBJECTS) $(LDFLAGS) -o $@
++	$(CC) $(OBJECTS) $(LDFLAGS) $(EXTRALIBS) -o $@
+ 
+ $(OBJECTS): $(DEPS)
+ 
+LDFLAGS ?= -L./lib 
