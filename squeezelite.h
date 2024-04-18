@@ -640,9 +640,9 @@ void output_init_stdout(log_level level, unsigned output_buf_size, char *params,
 void output_close_stdout(void);
 
 // output_pack.c
-void _scale_and_pack_frames(void *outputptr, s32_t *inputptr, frames_t cnt, s32_t gainL, s32_t gainR, u8_t flags, output_format format);
+void _scale_and_pack_frames(void *outputptr, s32_t *inputptr, frames_t cnt, s32_t gainL, s32_t gainR, output_format format);
 void _apply_cross(struct buffer *outputbuf, frames_t out_frames, s32_t cross_gain_in, s32_t cross_gain_out, s32_t **cross_ptr);
-void _apply_gain(struct buffer *outputbuf, frames_t count, s32_t gainL, s32_t gainR, u8_t flags);
+void _apply_gain(struct buffer *outputbuf, frames_t count, s32_t gainL, s32_t gainR);
 s32_t gain(s32_t gain, s32_t sample);
 s32_t to_gain(float f);
 
