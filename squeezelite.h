@@ -564,7 +564,7 @@ struct outputstate {
 	unsigned latency;
 	int osx_playnice;
 #endif
-	int (* write_cb)(frames_t out_frames, bool silence, s32_t gainL, s32_t gainR, u8_t flags, s32_t cross_gain_in, s32_t cross_gain_out, s32_t **cross_ptr);
+	int (* write_cb)(frames_t out_frames, bool silence, s32_t gainL, s32_t gainR, s32_t cross_gain_in, s32_t cross_gain_out, s32_t **cross_ptr);
 	unsigned start_frames;
 	unsigned frames_played;
 	unsigned frames_played_dmp;// frames played at the point delay is measured
