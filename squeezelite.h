@@ -186,7 +186,7 @@
 
 #if FREEBSD
 #define LIBFLAC "libFLAC.so.%d"
-#define LIBMAD  "libmad.so.0"
+#define LIBMAD  "libmad.so.2"
 #define LIBMPG "libmpg123.so.0"
 #define LIBVORBIS "libvorbisfile.so.6"
 #define LIBTREMOR "libvorbisidec.so.1"
