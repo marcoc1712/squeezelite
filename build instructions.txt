@@ -67,7 +67,6 @@ Squeezelite-R2 can builds on debian linux or fedora using included makefiles:
 - Makefile.debian (*)
 - Makefile.fedora (*)
 
-- Makefile.pa
 - Makefile.resample
 
 are just example on how to enable additiona features in linux.
