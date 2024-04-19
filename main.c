@@ -180,7 +180,7 @@ static void usage(const char *argv0) {
 static void license(void) {
 	printf(TITLE "\n" MODINFO "\n" MODINFO2 "\n"
 		   "-x option patch, to disable LMS downsampling, (c) 2015 Daphile\n"
-		   "dsd native playback on alsa linux, (c) 2015 Daphile\n\n"
+		   "dsd native playback on alsa linux, (c) 2015 Daphile\n"
 		   "libflac12 cand ogf suport 2024 Ralph Irving 2015-2024, ralph_irving@hotmail.com\n\n"
 		   "This program is free software: you can redistribute it and/or modify\n"
 		   "it under the terms of the GNU General Public License as published by\n"
