@@ -1,0 +1,5 @@
+CFLAGS  ?= -Wall -fPIC -s -O3 -march=armv7-a -mtune=cortex-a7 -DLINUX -DDSD -DALSA $(OPTS)
+LDFLAGS ?= -s -lasound -lpthread -lm -ldl -lrt -Wl,-rpath,/usr/local/lib
+EXECUTABLE ?= squeezelite-rpi2
+
+include Makefile

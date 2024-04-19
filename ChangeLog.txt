@@ -165,3 +165,11 @@ Version 1.8.4 (R2) 01/03/17
 Features
 - Added support to 'native' DSD playback in ALSA (tanks to Daphile)
 - Minor changes in makefiles, RPI and FREEBSD are now supported (tanks to SimoneFil)
+
+Version 24.04.18 (R2) 18/04/24
+===========================
+
+Features
+- use libFlac12 in new Linux distro (Debian 12) with added supports to OGG VORBIS FLAC format (thanks to Ralph Irving).  
+- removed support for platform other than GNU Linux / X86_64 architecture (still there but not tested anymore).
+

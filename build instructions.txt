@@ -1,15 +1,13 @@
 Dependencies
 
-ALL PLATFORMS
-
 Squeezelite-R2 requires header files for the following libraries to be present at 
-build time: * libasound2 * libflac * libmad0 * libvorbis * libfaad * libmpg123
+build time: * libasound2 * libflac * libmad0 * libvorbis * libmpg123
 
 All above libraries are dynamically loaded and optional at runtime, meaning that 
 these libraries are only required on the build machine.
 
 It also optionally supports the following libraries which may be enabled by 
-defining additional build options: * libsoxr * libffmpeg
+defining additional build options: * libsoxr * libffmpeg * libfaad
 
 DEBIAN LINUX:
 
@@ -22,7 +20,7 @@ Depends: libavformat56
 Depends: libavutil54  
 Depends: libc6  
 Depends: libfaad2  
-Depends: libflac8  
+Depends: libflac8 or libflac12   
 Depends: libmad0  
 Depends: libmpg123-0  
 Depends: libsoxr0  
@@ -43,26 +41,13 @@ Depends: libmpg123-0
 Depends: libsoxr0  
 Depends: libvorbisfile3
 
-OSX
-
-Include-osx contains the headers needed to build, tested from 10.7 to latest.
-
-You need a valid version of portaudio.a (static library)  in 
-./lib_osx folder.
-
-WINDOWS
-
-See squeezelite.vcxproj for dependencies in Windows.
-
-You should provide statics libraries as needed by other platform 
-
 Build Options
 
 Optional build options are enabled by passing additional defines to the compiler. 
 This may be done with the -D option to ggc or via setting OPTS before calling the 
 included makefiles. For example:
 
-OPTS="-DFFMPEG -DRESAMPLE" make
+OPTS="-DFFMPEG -DRESAMPLE -DFAAD" make
 
 The following build options are supported:
 
@@ -73,17 +58,14 @@ with FFMPEG library versions which match the header files used for compilation.
 This is necessary and the ffmpeg api changes between versions. 
 * VISEXPORT - support export of audio data to jivelite for visualization support (linux only) 
 * DSD - support of DSD playback via 'natives' formats when possible or DOP.  
+* FAAD - build with FAAD support 
 
 Target Platforms
 
-Squeezelite-R2 can builds on debian linux, osx using included makefiles:
+Squeezelite-R2 can builds on debian linux or fedora using included makefiles:
 
 - Makefile.debian (*)
-- Makefile.osx
-
-It also builds using MSVC++ (tested with MSVC2010) on Windows (use squeezelite.vcxproj).
-
-Above versions are used to build the binary versions attached to each release.
+- Makefile.fedora (*)
 
 - Makefile.pa
 - Makefile.resample
@@ -100,104 +82,9 @@ OPTS=-DRESAMPLE make clean
 
 OPTS=-DRESAMPLE make
 
-Other Makefiles are provvided and tested by different users, they worked when added, 
-but are not tested by me on every new releases, so they should work but may not.
-
-here the list, please reports errors, or new you wish to add, using issues in gitHub.
- 
-- Makefile.freebsd
-
-  Produced by: Triode (?)
-  First relased in version: 1.8 (?)
-  Modified by: Simone Filippini (info@simonefilippini.it)
-  Last release was reported as working: 1.8.4 by Simone Filippini (info@simonefilippini.it)
-  Reported as non working in release: never
-  Status: ALPHA: Needs test 
-  
-- Makefile.rpi (*)
-  
-  Produced by: Ralph Irving (?)
-  Modified by: Simone Filippini (info@simonefilippini.it)
-  First relased in version: 1.8 (?)
-  Last release was reported as working: 1.8.4 by Simone Filippini (info@simonefilippini.it)
-  Reported as non working in release: never
-  Status: Working
-
-  NOTES:
-  It works for RPI2, needs adjustments in FLAGS for RPI or RPI3.
-  DSD Works in Ubuntu non in raspbian (*).
-
-- Makefile.rpi_ARM64 (*)
-  
-  Produced by: Simone Filippini (info@simonefilippini.it)
-  First relased in version: 1.8.4 
-  Last release was reported as working: 1.8.4 by Simone Filippini (info@simonefilippini.it)
-  Reported as non working in release: never
-  Status: Working
-
-  NOTES:
-  It works for RPI2, needs adjustments in FLAGS for RPI or RPI3.
-  DSD Works in Ubuntu non in raspbian (*).
-
-- Makefile.raspbsd
-
-  Produced by: Simone Filippini (info@simonefilippini.it)
-  First relased in version: 1.8.4
-  Last release was reported as working: 1.8.4
-  Reported as non working in release: never
-  Status: ALPHA: Needs test 
-
-- Makefile.raspbsd_ARM64
-
-  Produced by: Simone Filippini (info@simonefilippini.it)
-  First relased in version: 1.8.4
-  Last release was reported as working: 1.8.4
-  Reported as non working in release: never
-  Status: ALPHA: Needs test 
-
-- Makefile.osx-i386 (osx is dual arch, this is i386 only)
-
-  Produced by: Ralph Irving (?)
-  First relased in version: 1.8 (?)
-  Last release was reported as working: 1.8 (?)
-  Reported as non working in release: 1.8.4 by Simone Filippini (info@simonefilippini.it)
-  Status: obsolete.
-  
-  NOTES: 
-  Makefie.osx produces an executable with double arch, so it's portable both on 
-  i386 and x86_64 machines. This one is not needed anymore.
-  
-- Makefile.osx-x86_64 (osx is dual arch, this is x86_64 only)
-
-  Produced by: Ralph Irving (?)
-  First relased in version: 1.8 (?)
-  Last release was reported as working: 1.8 (?)
-  Reported as non working in release: 1.8.4 by Simone Filippini (info@simonefilippini.it)
-  Status: obsolete.
-  
-  NOTES: 
-  Makefie.osx produces an executable with double arch, so it's portable both on 
-  i386 and x86_64 machines. This one is not needed anymore.
-  
-- Makefile.osx-ppc (very old, but maybe works)
-  
-  Produced by: Ralph Irving (?)
-  First relased in version: 1.8 (?)
-  Last release was reported as working: 1.8 (?)
-  Reported as non working in release: never
-  Status: unknown, need test
-
-- Makefile.osx-ppc64 (very old, but maybe works)
-
-  Produced by: Ralph Irving (?)
-  First relased in version: 1.8 (?)
-  Last release was reported as working: 1.8 (?)
-  Reported as non working in release: never
-  Status: unknown,, need test
-
-More at: https://audiodigitale.eu/
-
 (*) PLEASE NOTE: DSD option require ALSA >= 1.0.29 to work.
 Debian jessie 'stable' is not a candidate, works in Ubuntu 16.04LTS.
 
 To compile without DSD support, edit the Makefile.xxx and remove -DSD option.
+
+SEE "Old versions" folder for other option or visit: https://audiodigitale.eu/
